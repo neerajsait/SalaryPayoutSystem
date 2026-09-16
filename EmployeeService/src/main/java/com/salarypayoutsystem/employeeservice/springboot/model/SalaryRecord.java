@@ -6,11 +6,17 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.io.Serializable;
 
 
 @Entity
-@Table(name = "salary_records")
+@Table(name = "salary_records", uniqueConstraints = {
+    @UniqueConstraint(
+        name = "uk_salary_employee_month_year",
+        columnNames = {"employee_id", "month", "year"}
+    )
+})
 public class SalaryRecord implements Serializable {
     private static final long serialVersionUID = 1L;
     @Id
