@@ -57,11 +57,7 @@
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Authenticate</button>
             </form>
-            <div style="margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                <p><strong>Demo Roles:</strong></p>
-                <p>Admin: admin / admin123</p>
-                <p>HR: hr / hr123</p>
-            </div>
+
         </div>
     </div>
 </body>

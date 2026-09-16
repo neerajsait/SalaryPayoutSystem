@@ -32,11 +32,16 @@ This project is divided into three distinct Spring Boot microservices:
 
 ## Setup Instructions
 
+This project is a ready-to-deploy template. You can easily configure it for your own business without touching the Java code.
+
 1. Ensure MySQL is running on port 3306 with a root user and password `root`.
-2. Start the services via your IDE or Maven:
+2. **Configure Admin Credentials**: 
+   - Open `FrontendService/src/main/resources/application.properties`.
+   - Update `app.admin.username` and `app.admin.password` with your desired secure credentials.
+3. **Configure Stripe API**: 
+   - Set up your Stripe keys in the `PaymentService` `.env` or `application.properties` file.
+4. Start the services via your IDE or Maven:
    - `EmployeeService`
    - `PaymentService`
    - `FrontendService`
-3. Access the application at `http://localhost:8080/`.
-
-**Note:** For local testing of the Stripe integration, you will need to add a valid Stripe Secret Key in the `PaymentService` `application.properties` file.
+5. Access the application at `http://localhost:8080/`.

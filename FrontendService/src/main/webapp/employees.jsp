@@ -126,7 +126,8 @@
                 resetForm();
                 fetchEmployees();
             } else {
-                showToast('Failed to save employee', 'error');
+                const text = await res.text();
+                showToast('Failed to save employee: ' + text, 'error');
             }
         } catch(err) {
             showToast('Network error', 'error');

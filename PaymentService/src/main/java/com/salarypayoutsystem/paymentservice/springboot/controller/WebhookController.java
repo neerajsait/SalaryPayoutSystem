@@ -42,9 +42,17 @@ public class WebhookController {
                     // 2. Update Salary Record to PAID
                     Long salaryRecordId = payment.getSalaryRecordId();
                     String url = "http://localhost:8081/api/salaries/" + salaryRecordId + "/status";
-                    restTemplate.put(url, Map.of("status", "PAID"));
                     
-                    System.out.println("Payment Success! Updated salary record " + salaryRecordId + " to PAID.");
+                    org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                    headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                    org.springframework.http.HttpEntity<Map<String, String>> requestEntity = new org.springframework.http.HttpEntity<>(Map.of("status", "PAID"), headers);
+                    
+                    try {
+                        restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, requestEntity, String.class);
+                        System.out.println("Payment Success! Updated salary record " + salaryRecordId + " to PAID.");
+                    } catch (Exception ex) {
+                        System.err.println("Error calling EmployeeService: " + ex.getMessage());
+                    }
                 }
             } else if ("payment_intent.payment_failed".equals(type)) {
                 Map<String, Object> data = (Map<String, Object>) payload.get("data");

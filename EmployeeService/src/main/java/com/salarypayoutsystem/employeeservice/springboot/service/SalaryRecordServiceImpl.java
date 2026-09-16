@@ -61,8 +61,12 @@ public class SalaryRecordServiceImpl implements SalaryRecordService {
         
         // Automate payment creation via PaymentService
         try {
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             Map<String, Object> payload = Map.of("salaryRecordId", savedRecord.getId());
-            restTemplate.postForObject(PAYMENT_SERVICE_URL, payload, Object.class);
+            org.springframework.http.HttpEntity<Map<String, Object>> requestEntity = new org.springframework.http.HttpEntity<>(payload, headers);
+            
+            restTemplate.postForObject(PAYMENT_SERVICE_URL, requestEntity, Object.class);
         } catch (Exception e) {
             System.err.println("Failed to automate payment for SalaryRecord " + savedRecord.getId() + ": " + e.getMessage());
         }

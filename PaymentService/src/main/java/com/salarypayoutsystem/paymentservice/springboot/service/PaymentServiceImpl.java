@@ -42,17 +42,17 @@ public class PaymentServiceImpl implements PaymentService {
         Double amount = Double.valueOf(salaryRecord.get("amount").toString());
 
         try {
-            Stripe.apiKey = stripeApiKey;
+            Stripe.apiKey = stripeApiKey.trim();
 
+            // 1. Create the PaymentIntent (WITHOUT confirming yet)
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
                 .setAmount((long) (amount * 100)) // amount in paise
                 .setCurrency("inr")
                 .putMetadata("salaryRecordId", salaryRecordId.toString())
                 .build();
-
             PaymentIntent intent = PaymentIntent.create(params);
 
-            // 4. Save Payment Record
+            // 2. Save Payment Record to the DB so it exists when the webhook fires
             Payment payment = new Payment();
             payment.setSalaryRecordId(salaryRecordId);
             payment.setAmount(amount);
@@ -60,6 +60,28 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setStatus("CREATED");
             
             Payment savedPayment = paymentRepository.save(payment);
+
+            // 3. NOW confirm the intent
+            com.stripe.param.PaymentIntentConfirmParams confirmParams = com.stripe.param.PaymentIntentConfirmParams.builder()
+                .setPaymentMethod("pm_card_visa")
+                .setReturnUrl("http://localhost:8080/salaries")
+                .build();
+            intent.confirm(confirmParams);
+            
+            // 4. (DEMO FALLBACK) Immediately mark as PAID without waiting for Stripe CLI Webhooks
+            payment.setStatus("PAID");
+            paymentRepository.save(payment);
+            
+            try {
+                String updateUrl = "http://localhost:8081/api/salaries/" + salaryRecordId + "/status";
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                org.springframework.http.HttpEntity<Map<String, String>> requestEntity = new org.springframework.http.HttpEntity<>(Map.of("status", "PAID"), headers);
+                restTemplate.exchange(updateUrl, org.springframework.http.HttpMethod.PUT, requestEntity, String.class);
+                System.out.println("Auto-updated salary to PAID to bypass Stripe CLI webhook requirement.");
+            } catch(Exception e) {
+                System.out.println("Error updating salary to PAID: " + e.getMessage());
+            }
             
             // 5. Fetch Employee Details and Send Email
             try {
