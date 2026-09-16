@@ -66,9 +66,8 @@ public class PaymentServiceImpl implements PaymentService {
             paymentEventProducer.publishPaymentResult(event.salaryRecordId(), "PAID", intent.getId());
             System.out.println("Payment processed and published payment.succeeded for salaryRecordId=" + event.salaryRecordId());
 
-            // 6. TODO Phase 4: publish notification.send event for email
-            //    paymentEventProducer.publishNotification(event.employeeEmail(), event.employeeName(),
-            //        event.month(), event.year(), event.amount());
+            // 6. Publish notification.send event — EmployeeService sends the PDF payslip email
+            paymentEventProducer.publishNotification(event);
 
             return savedPayment;
 

@@ -1,5 +1,7 @@
 package com.salarypayoutsystem.employeeservice.springboot.service;
 
+import com.salarypayoutsystem.employeeservice.springboot.event.EmployeeEvent;
+import com.salarypayoutsystem.employeeservice.springboot.kafka.EmployeeEventProducer;
 import com.salarypayoutsystem.employeeservice.springboot.model.Employee;
 import com.salarypayoutsystem.employeeservice.springboot.repository.EmployeeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,9 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private EmployeeEventProducer employeeEventProducer;
 
     @Override
     @Caching(evict = {
@@ -37,7 +42,17 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (employee.getStatus() == null || employee.getStatus().isEmpty()) {
             employee.setStatus("ACTIVE");
         }
-        return employeeRepository.save(employee);
+
+        Employee savedEmployee = employeeRepository.save(employee);
+
+        // Publish CREATED event — future hook for AuditService, welcome email, etc.
+        employeeEventProducer.publishEmployeeEvent(new EmployeeEvent(
+            savedEmployee.getId(), "CREATED",
+            savedEmployee.getName(), savedEmployee.getEmail(),
+            savedEmployee.getBasicSalary(), savedEmployee.getStatus()
+        ));
+
+        return savedEmployee;
     }
 
     @Override
@@ -67,7 +82,16 @@ public class EmployeeServiceImpl implements EmployeeService {
             existingEmployee.setBankAccountUpi(employeeDetails.getBankAccountUpi());
             existingEmployee.setBasicSalary(employeeDetails.getBasicSalary());
             existingEmployee.setStatus(employeeDetails.getStatus());
-            return employeeRepository.save(existingEmployee);
+            Employee updatedEmployee = employeeRepository.save(existingEmployee);
+
+            // Publish UPDATED event — future hook for ReportsService, recalculate salaries, etc.
+            employeeEventProducer.publishEmployeeEvent(new EmployeeEvent(
+                updatedEmployee.getId(), "UPDATED",
+                updatedEmployee.getName(), updatedEmployee.getEmail(),
+                updatedEmployee.getBasicSalary(), updatedEmployee.getStatus()
+            ));
+
+            return updatedEmployee;
         }
         throw new RuntimeException("Employee not found with id " + id);
     }
@@ -82,10 +106,16 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (optionalEmployee.isPresent()) {
             Employee existingEmployee = optionalEmployee.get();
             existingEmployee.setStatus("INACTIVE");
-            employeeRepository.save(existingEmployee);
+            Employee deactivatedEmployee = employeeRepository.save(existingEmployee);
+
+            // Publish DEACTIVATED event — future hook for AuditService, access revocation, etc.
+            employeeEventProducer.publishEmployeeEvent(new EmployeeEvent(
+                deactivatedEmployee.getId(), "DEACTIVATED",
+                deactivatedEmployee.getName(), deactivatedEmployee.getEmail(),
+                deactivatedEmployee.getBasicSalary(), deactivatedEmployee.getStatus()
+            ));
         } else {
             throw new RuntimeException("Employee not found with id " + id);
         }
     }
 }
-
