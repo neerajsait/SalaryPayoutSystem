@@ -1,5 +1,7 @@
 package com.salarypayoutsystem.employeeservice.springboot.service;
 
+import com.salarypayoutsystem.employeeservice.springboot.event.SalaryGeneratedEvent;
+import com.salarypayoutsystem.employeeservice.springboot.kafka.SalaryEventProducer;
 import com.salarypayoutsystem.employeeservice.springboot.model.Employee;
 import com.salarypayoutsystem.employeeservice.springboot.model.SalaryRecord;
 import com.salarypayoutsystem.employeeservice.springboot.repository.SalaryRecordRepository;
@@ -8,9 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import org.springframework.web.client.RestTemplate;
 
 @Service
 public class SalaryRecordServiceImpl implements SalaryRecordService {
@@ -20,36 +20,35 @@ public class SalaryRecordServiceImpl implements SalaryRecordService {
 
     @Autowired
     private EmployeeService employeeService;
-    
-    private RestTemplate restTemplate = new RestTemplate();
-    private final String PAYMENT_SERVICE_URL = "http://localhost:8083/api/payments/create-order";
+
+    @Autowired
+    private SalaryEventProducer salaryEventProducer;
 
     @Override
     public SalaryRecord generateSalary(Long employeeId, String month, Integer year) {
-        // Fetch employee details directly from EmployeeService
+        // Fetch employee details
         Optional<Employee> employeeOpt = employeeService.getEmployeeById(employeeId);
-        
+
         if (employeeOpt.isEmpty()) {
             throw new RuntimeException("Employee not found with ID: " + employeeId);
         }
 
         Employee employee = employeeOpt.get();
-        
+
         if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())) {
             throw new RuntimeException("Cannot generate salary for inactive employee.");
         }
-        
+
         if (salaryRecordRepository.existsByEmployeeIdAndMonthAndYear(employeeId, month, year)) {
             throw new RuntimeException("Salary record already exists for " + month + " " + year);
         }
 
-        // Extract basic salary
         Double basicSalary = employee.getBasicSalary();
         if (basicSalary == null) {
             basicSalary = 0.0;
         }
 
-        // Create the salary record
+        // Create and save the salary record
         SalaryRecord record = new SalaryRecord();
         record.setEmployeeId(employeeId);
         record.setMonth(month);
@@ -58,19 +57,20 @@ public class SalaryRecordServiceImpl implements SalaryRecordService {
         record.setStatus("PENDING");
 
         SalaryRecord savedRecord = salaryRecordRepository.save(record);
-        
-        // Automate payment creation via PaymentService
-        try {
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            Map<String, Object> payload = Map.of("salaryRecordId", savedRecord.getId());
-            org.springframework.http.HttpEntity<Map<String, Object>> requestEntity = new org.springframework.http.HttpEntity<>(payload, headers);
-            
-            restTemplate.postForObject(PAYMENT_SERVICE_URL, requestEntity, Object.class);
-        } catch (Exception e) {
-            System.err.println("Failed to automate payment for SalaryRecord " + savedRecord.getId() + ": " + e.getMessage());
-        }
-        
+
+        // Publish to Kafka — PaymentService will consume this asynchronously.
+        // No direct HTTP call needed. If PaymentService is down, the event waits in Kafka.
+        SalaryGeneratedEvent event = new SalaryGeneratedEvent(
+            savedRecord.getId(),
+            employee.getId(),
+            basicSalary,
+            month,
+            year,
+            employee.getEmail(),
+            employee.getName()
+        );
+        salaryEventProducer.publishSalaryGenerated(event);
+
         return savedRecord;
     }
 
@@ -81,7 +81,8 @@ public class SalaryRecordServiceImpl implements SalaryRecordService {
 
     @Override
     public SalaryRecord getSalaryRecordById(Long id) {
-        return salaryRecordRepository.findById(id).orElseThrow(() -> new RuntimeException("Salary record not found"));
+        return salaryRecordRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Salary record not found"));
     }
 
     @Override
@@ -102,7 +103,6 @@ public class SalaryRecordServiceImpl implements SalaryRecordService {
         for (Employee emp : allEmployees) {
             if ("ACTIVE".equalsIgnoreCase(emp.getStatus())) {
                 try {
-                    // Check if already exists to prevent duplicate generation during cron
                     if (!salaryRecordRepository.existsByEmployeeIdAndMonthAndYear(emp.getId(), month, year)) {
                         generateSalary(emp.getId(), month, year);
                         System.out.println("Auto-generated salary for: " + emp.getName());
@@ -118,7 +118,7 @@ public class SalaryRecordServiceImpl implements SalaryRecordService {
     public List<SalaryRecord> generateSalariesForAllActive(String month, Integer year) {
         List<Employee> allEmployees = employeeService.getAllEmployees();
         List<SalaryRecord> generatedRecords = new ArrayList<>();
-        
+
         for (Employee emp : allEmployees) {
             if ("ACTIVE".equalsIgnoreCase(emp.getStatus())) {
                 try {

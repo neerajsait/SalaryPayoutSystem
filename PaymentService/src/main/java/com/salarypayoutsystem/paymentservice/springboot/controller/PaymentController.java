@@ -1,13 +1,13 @@
 package com.salarypayoutsystem.paymentservice.springboot.controller;
 
 import com.salarypayoutsystem.paymentservice.springboot.model.Payment;
-import com.salarypayoutsystem.paymentservice.springboot.service.PaymentService;
+import com.salarypayoutsystem.paymentservice.springboot.repository.PaymentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -15,17 +15,21 @@ import java.util.Map;
 public class PaymentController {
 
     @Autowired
-    private PaymentService paymentService;
+    private PaymentRepository paymentRepository;
 
-    // Payload: { "salaryRecordId": 1 }
-    @PostMapping("/create-order")
-    public ResponseEntity<?> createOrder(@RequestBody Map<String, Object> request) {
-        try {
-            Long salaryRecordId = Long.valueOf(request.get("salaryRecordId").toString());
-            Payment payment = paymentService.createPaymentOrder(salaryRecordId);
-            return new ResponseEntity<>(payment, HttpStatus.CREATED);
-        } catch (Exception e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
-        }
+    /**
+     * Payment creation is now event-driven via Kafka (salary.generated topic).
+     * This endpoint returns all payment records for monitoring/admin purposes.
+     */
+    @GetMapping
+    public ResponseEntity<List<Payment>> getAllPayments() {
+        return new ResponseEntity<>(paymentRepository.findAll(), HttpStatus.OK);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getPaymentById(@PathVariable Long id) {
+        return paymentRepository.findById(id)
+            .<ResponseEntity<?>>map(p -> new ResponseEntity<>(p, HttpStatus.OK))
+            .orElse(new ResponseEntity<>("Payment not found", HttpStatus.NOT_FOUND));
     }
 }

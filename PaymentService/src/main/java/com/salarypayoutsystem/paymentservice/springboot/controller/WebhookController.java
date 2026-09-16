@@ -1,12 +1,12 @@
 package com.salarypayoutsystem.paymentservice.springboot.controller;
 
+import com.salarypayoutsystem.paymentservice.springboot.kafka.PaymentEventProducer;
 import com.salarypayoutsystem.paymentservice.springboot.model.Payment;
 import com.salarypayoutsystem.paymentservice.springboot.repository.PaymentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 import java.util.Optional;
@@ -19,60 +19,49 @@ public class WebhookController {
     @Autowired
     private PaymentRepository paymentRepository;
 
-    private RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private PaymentEventProducer paymentEventProducer;
 
     @PostMapping("/webhook")
     public ResponseEntity<String> handleStripeWebhook(@RequestBody Map<String, Object> payload) {
         try {
             String type = (String) payload.get("type");
-            
+
             if ("payment_intent.succeeded".equals(type)) {
                 Map<String, Object> data = (Map<String, Object>) payload.get("data");
                 Map<String, Object> object = (Map<String, Object>) data.get("object");
-                
                 String transactionId = (String) object.get("id");
-                
-                // 1. Update Payment Record to PAID
+
                 Optional<Payment> paymentOpt = paymentRepository.findByTransactionId(transactionId);
                 if (paymentOpt.isPresent()) {
                     Payment payment = paymentOpt.get();
                     payment.setStatus("PAID");
                     paymentRepository.save(payment);
-                    
-                    // 2. Update Salary Record to PAID
-                    Long salaryRecordId = payment.getSalaryRecordId();
-                    String url = "http://localhost:8081/api/salaries/" + salaryRecordId + "/status";
-                    
-                    org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-                    headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-                    org.springframework.http.HttpEntity<Map<String, String>> requestEntity = new org.springframework.http.HttpEntity<>(Map.of("status", "PAID"), headers);
-                    
-                    try {
-                        restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, requestEntity, String.class);
-                        System.out.println("Payment Success! Updated salary record " + salaryRecordId + " to PAID.");
-                    } catch (Exception ex) {
-                        System.err.println("Error calling EmployeeService: " + ex.getMessage());
-                    }
+
+                    // Notify EmployeeService via Kafka — no RestTemplate call
+                    paymentEventProducer.publishPaymentResult(payment.getSalaryRecordId(), "PAID", transactionId);
+                    System.out.println("Webhook: published payment.succeeded for salaryRecordId=" + payment.getSalaryRecordId());
                 }
+
             } else if ("payment_intent.payment_failed".equals(type)) {
                 Map<String, Object> data = (Map<String, Object>) payload.get("data");
                 Map<String, Object> object = (Map<String, Object>) data.get("object");
                 String transactionId = (String) object.get("id");
-                
+
                 Optional<Payment> paymentOpt = paymentRepository.findByTransactionId(transactionId);
                 if (paymentOpt.isPresent()) {
                     Payment payment = paymentOpt.get();
                     payment.setStatus("FAILED");
                     paymentRepository.save(payment);
-                    
-                    Long salaryRecordId = payment.getSalaryRecordId();
-                    String url = "http://localhost:8081/api/salaries/" + salaryRecordId + "/status";
-                    restTemplate.put(url, Map.of("status", "FAILED"));
+
+                    // Notify EmployeeService via Kafka — no RestTemplate call
+                    paymentEventProducer.publishPaymentResult(payment.getSalaryRecordId(), "FAILED", transactionId);
+                    System.out.println("Webhook: published payment.failed for salaryRecordId=" + payment.getSalaryRecordId());
                 }
             }
-            
+
             return new ResponseEntity<>("Webhook processed", HttpStatus.OK);
-            
+
         } catch (Exception e) {
             System.err.println("Webhook error: " + e.getMessage());
             return new ResponseEntity<>("Webhook error", HttpStatus.BAD_REQUEST);

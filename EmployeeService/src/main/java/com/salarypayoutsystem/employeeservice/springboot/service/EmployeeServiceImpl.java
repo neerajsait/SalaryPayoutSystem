@@ -3,6 +3,9 @@ package com.salarypayoutsystem.employeeservice.springboot.service;
 import com.salarypayoutsystem.employeeservice.springboot.model.Employee;
 import com.salarypayoutsystem.employeeservice.springboot.repository.EmployeeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,6 +18,10 @@ public class EmployeeServiceImpl implements EmployeeService {
     private EmployeeRepository employeeRepository;
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "employee", allEntries = true)
+    })
     public Employee addEmployee(Employee employee) {
         if (employeeRepository.existsByEmail(employee.getEmail())) {
             throw new RuntimeException("An employee with this email already exists!");
@@ -34,16 +41,22 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
+    @Cacheable("employees")
     public List<Employee> getAllEmployees() {
         return employeeRepository.findAll();
     }
 
     @Override
+    @Cacheable(value = "employee", key = "#id")
     public Optional<Employee> getEmployeeById(Long id) {
         return employeeRepository.findById(id);
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "employee", allEntries = true)
+    })
     public Employee updateEmployee(Long id, Employee employeeDetails) {
         Optional<Employee> optionalEmployee = employeeRepository.findById(id);
         if (optionalEmployee.isPresent()) {
@@ -60,6 +73,10 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "employee", allEntries = true)
+    })
     public void deleteEmployee(Long id) {
         Optional<Employee> optionalEmployee = employeeRepository.findById(id);
         if (optionalEmployee.isPresent()) {
@@ -71,3 +88,4 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
     }
 }
+
