@@ -13,7 +13,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/payments")
-@CrossOrigin("*")
+@CrossOrigin("http://localhost:8080")
 public class WebhookController {
 
     @Autowired

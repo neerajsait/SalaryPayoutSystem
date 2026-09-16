@@ -12,7 +12,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/salaries")
-@CrossOrigin("*")
+@CrossOrigin("http://localhost:8080")
 public class SalaryController {
 
     @Autowired
